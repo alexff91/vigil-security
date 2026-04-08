@@ -1,0 +1,77 @@
+# Vigil Security Configuration
+# Copy this to vigil.yaml and customize for your environment.
+# Environment variables can be used with ${VAR_NAME} syntax.
+
+# Telegram alerts (optional)
+telegram:
+  bot_token: "${VIGIL_TELEGRAM_TOKEN}"
+  chat_id: "${VIGIL_TELEGRAM_CHAT_ID}"
+  enabled: false
+
+# Dependency vulnerability scanning via OSV.dev
+dependencies:
+  enabled: true
+  paths:
+    - "."
+    # - "/path/to/another/project"
+
+# Secret and credential detection
+secrets:
+  enabled: true
+  paths:
+    - "."
+  exclude_patterns:
+    - "*.pyc"
+    - "__pycache__"
+    - ".git"
+    - "node_modules"
+    - ".venv"
+    - "venv"
+    - "*.min.js"
+    - "*.lock"
+    - "package-lock.json"
+  max_file_size_kb: 512
+
+# Port scanning
+ports:
+  enabled: true
+  hosts:
+    - "example.com"
+    # - "192.168.1.1"
+  ports:
+    - 22
+    - 80
+    - 443
+    - 3306
+    - 5432
+    - 6379
+    - 8080
+    - 27017
+  timeout: 2.0
+
+# SSL certificate monitoring
+ssl:
+  enabled: true
+  hosts:
+    - "example.com"
+    # - "api.example.com:8443"
+  warn_days: 30
+  critical_days: 7
+
+# Uptime / health check monitoring
+uptime:
+  enabled: true
+  endpoints:
+    - name: "Main Website"
+      url: "https://example.com"
+      method: GET
+      expected_status: 200
+    # - name: "API Health"
+    #   url: "https://api.example.com/health"
+    #   method: GET
+    #   expected_status: 200
+    #   timeout: 5
+  timeout: 10.0
+
+# Report output directory
+output_dir: "./vigil-reports"
