@@ -5,17 +5,19 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
-import os
 import sys
 from pathlib import Path
 
 from vigil import __version__
+from vigil.alerts.console import ConsoleAlerter
+from vigil.alerts.slack import SlackAlerter
+from vigil.alerts.telegram import TelegramAlerter
 from vigil.config import load_config
 from vigil.engine import ScanEngine
-from vigil.alerts.console import ConsoleAlerter
-from vigil.alerts.telegram import TelegramAlerter
-from vigil.reporters.json_reporter import JSONReporter
 from vigil.reporters.html_reporter import HTMLReporter
+from vigil.reporters.json_reporter import JSONReporter
+from vigil.reporters.markdown_reporter import MarkdownReporter
+from vigil.scoring import compute_score
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -90,6 +92,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output file path",
     )
 
+    # score command
+    score_parser = subparsers.add_parser(
+        "score",
+        help="Aggregate all scanners into a 0-100 security posture score",
+    )
+    score_parser.add_argument(
+        "--format", choices=["console", "markdown"], default="console",
+        help="Output format (default: console)",
+    )
+    score_parser.add_argument(
+        "-o", "--output",
+        help="Write the Markdown report to this file path",
+    )
+    score_parser.add_argument(
+        "--digest", choices=["telegram", "slack"], action="append", default=[],
+        help="Post a concise weekly digest (repeatable for multiple targets)",
+    )
+    score_parser.add_argument(
+        "--fail-under", type=int, default=None,
+        help="Exit non-zero if the score is below this threshold",
+    )
+
     return parser
 
 
@@ -123,6 +147,8 @@ def main() -> None:
         asyncio.run(_cmd_monitor(args, config))
     elif args.command == "report":
         asyncio.run(_cmd_report(args, config))
+    elif args.command == "score":
+        asyncio.run(_cmd_score(args, config))
 
 
 async def _cmd_scan(args: argparse.Namespace, config) -> None:
@@ -206,6 +232,62 @@ async def _cmd_report(args: argparse.Namespace, config) -> None:
         reporter.generate(results, output)
 
     print(f"Report saved to {output}")
+
+
+async def _cmd_score(args: argparse.Namespace, config) -> None:
+    """Compute and present the aggregated security posture score."""
+    engine = ScanEngine(config)
+    results = await engine.run_all()
+    posture = compute_score(results)
+
+    if args.format == "markdown":
+        reporter = MarkdownReporter()
+        output = args.output or _default_output_path(config, "md")
+        reporter.generate(posture, output)
+        print(f"Markdown report saved to {output}")
+    else:
+        _print_score_console(posture, use_color=not args.no_color)
+        if args.output:
+            MarkdownReporter().generate(posture, args.output)
+            print(f"\nMarkdown report saved to {args.output}")
+
+    # Weekly digests (deduplicated, one message per target)
+    for target in args.digest:
+        if target == "telegram":
+            if config.telegram.enabled and config.telegram.bot_token:
+                tg = TelegramAlerter(config.telegram.bot_token, config.telegram.chat_id)
+                await tg.send_digest(posture)
+            else:
+                logging.getLogger(__name__).warning("Telegram not configured.")
+        elif target == "slack":
+            if config.slack.enabled and config.slack.webhook_url:
+                await SlackAlerter(config.slack.webhook_url).send_digest(posture)
+            else:
+                logging.getLogger(__name__).warning("Slack not configured.")
+
+    if args.fail_under is not None and posture.score < args.fail_under:
+        sys.exit(1)
+
+
+def _print_score_console(posture, use_color: bool) -> None:
+    """Print a compact posture summary to the console."""
+    print("=" * 50)
+    print(f"  Security Posture Score: {posture.score}/100  (Grade {posture.grade})")
+    print(f"  {posture.total_findings} finding(s)")
+    print("=" * 50)
+    for sev, count in posture.severity_counts.items():
+        if count:
+            print(f"  {sev.value.upper():<9} {count}")
+    if posture.remediation:
+        print("\nPrioritized remediation:")
+        for i, item in enumerate(posture.remediation, start=1):
+            occ = f" (x{item.count})" if item.count > 1 else ""
+            print(f"  {i}. [{item.severity.value.upper()}] {item.title}{occ}")
+            print(f"     -> {item.recommendation}")
+    if posture.errors:
+        print("\nScanner errors:")
+        for err in posture.errors:
+            print(f"  - {err}")
 
 
 async def _send_telegram(config, results) -> None:

@@ -8,6 +8,11 @@ telegram:
   chat_id: "${VIGIL_TELEGRAM_CHAT_ID}"
   enabled: false
 
+# Slack weekly digest (optional) -- used by the `score --digest slack` command
+slack:
+  webhook_url: "${VIGIL_SLACK_WEBHOOK}"
+  enabled: false
+
 # Dependency vulnerability scanning via OSV.dev
 dependencies:
   enabled: true

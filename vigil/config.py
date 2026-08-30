@@ -18,6 +18,12 @@ class TelegramConfig:
 
 
 @dataclass
+class SlackConfig:
+    webhook_url: str = ""
+    enabled: bool = False
+
+
+@dataclass
 class DependencyScanConfig:
     enabled: bool = True
     paths: list[str] = field(default_factory=list)
@@ -64,6 +70,7 @@ class UptimeConfig:
 @dataclass
 class VigilConfig:
     telegram: TelegramConfig = field(default_factory=TelegramConfig)
+    slack: SlackConfig = field(default_factory=SlackConfig)
     dependencies: DependencyScanConfig = field(default_factory=DependencyScanConfig)
     secrets: SecretScanConfig = field(default_factory=SecretScanConfig)
     ports: PortScanConfig = field(default_factory=PortScanConfig)
@@ -127,6 +134,14 @@ def load_config(path: Optional[str] = None) -> VigilConfig:
             bot_token=tg.get("bot_token", ""),
             chat_id=str(tg.get("chat_id", "")),
             enabled=tg.get("enabled", bool(tg.get("bot_token"))),
+        )
+
+    # Slack
+    if "slack" in raw:
+        sl = raw["slack"]
+        config.slack = SlackConfig(
+            webhook_url=sl.get("webhook_url", ""),
+            enabled=sl.get("enabled", bool(sl.get("webhook_url"))),
         )
 
     # Dependencies

@@ -60,6 +60,15 @@ class TelegramAlerter:
                 if finding.severity in (Severity.CRITICAL, Severity.HIGH):
                     await self._send_finding(finding)
 
+    async def send_digest(self, posture) -> None:
+        """Send a single concise weekly digest instead of per-finding spam."""
+        if not self.bot_token or not self.chat_id:
+            logger.warning("Telegram not configured, skipping digest")
+            return
+        from vigil.scoring import build_digest
+
+        await self._send_message(self._escape_md(build_digest(posture)))
+
     async def send_finding(self, finding: Finding) -> None:
         """Send a single finding to Telegram."""
         await self._send_finding(finding)
